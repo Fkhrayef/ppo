@@ -12,6 +12,7 @@ import (
 	"github.com/example/ppo/internal/client/product"
 	"github.com/example/ppo/internal/client/psp"
 	"github.com/example/ppo/internal/config"
+	mw "github.com/example/ppo/internal/middleware"
 	"github.com/example/ppo/internal/order"
 	"github.com/example/ppo/internal/postpurchase"
 	"github.com/example/ppo/internal/scheduler"
@@ -23,12 +24,24 @@ type Server struct {
 }
 
 func New(cfg *config.Config, db *gorm.DB, logger *slog.Logger) *Server {
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-
 	// --- external clients ---
-	lmsClient := lms.NewClient(cfg.LMSBaseURL, httpClient)
-	pspClient := psp.NewClient(cfg.PSPBaseURL, httpClient)
-	prodClient := product.NewClient(cfg.ProductBaseURL, httpClient)
+	var (
+		lmsClient  lms.Client
+		pspClient  psp.Client
+		prodClient product.Client
+	)
+
+	if cfg.UseFakeClients {
+		logger.Info("using FAKE external clients — responses are static contract stubs")
+		lmsClient = lms.NewFake(logger)
+		pspClient = psp.NewFake(logger)
+		prodClient = product.NewFake(logger)
+	} else {
+		httpClient := &http.Client{Timeout: 10 * time.Second}
+		lmsClient = lms.NewHTTPClient(cfg.LMSBaseURL, httpClient)
+		pspClient = psp.NewHTTPClient(cfg.PSPBaseURL, httpClient)
+		prodClient = product.NewHTTPClient(cfg.ProductBaseURL, httpClient)
+	}
 
 	// --- repositories ---
 	orderRepo := order.NewRepository(db)
@@ -45,6 +58,7 @@ func New(cfg *config.Config, db *gorm.DB, logger *slog.Logger) *Server {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(requestLogger(logger))
+	r.Use(mw.ErrorHandler())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

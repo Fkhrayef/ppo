@@ -1,13 +1,11 @@
 package order
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/example/ppo/pkg/apperror"
 	"github.com/example/ppo/pkg/response"
 )
 
@@ -34,7 +32,7 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 
 	o, err := h.svc.Create(c.Request.Context(), req)
 	if err != nil {
-		handleError(c, err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -49,30 +47,9 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 	}
 
 	if err := h.svc.Cancel(c.Request.Context(), id); err != nil {
-		handleError(c, err)
+		_ = c.Error(err)
 		return
 	}
 
 	response.OK(c, gin.H{"message": "order cancelled and refunded"})
-}
-
-func handleError(c *gin.Context, err error) {
-	var appErr *apperror.Error
-	if !errors.As(err, &appErr) {
-		response.Err(c, http.StatusInternalServerError, "INTERNAL", "unexpected error")
-		return
-	}
-
-	switch appErr.Kind {
-	case apperror.KindNotFound:
-		response.Err(c, http.StatusNotFound, "NOT_FOUND", appErr.Message)
-	case apperror.KindValidation:
-		response.Err(c, http.StatusBadRequest, "VALIDATION", appErr.Message)
-	case apperror.KindConflict:
-		response.Err(c, http.StatusConflict, "CONFLICT", appErr.Message)
-	case apperror.KindUpstream:
-		response.Err(c, http.StatusBadGateway, "UPSTREAM_ERROR", appErr.Message)
-	default:
-		response.Err(c, http.StatusInternalServerError, "INTERNAL", appErr.Message)
-	}
 }

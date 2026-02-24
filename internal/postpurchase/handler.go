@@ -1,12 +1,10 @@
 package postpurchase
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/example/ppo/pkg/apperror"
 	"github.com/example/ppo/pkg/response"
 )
 
@@ -32,7 +30,7 @@ func (h *Handler) GetInstallments(c *gin.Context) {
 
 	installments, err := h.svc.GetInstallments(c.Request.Context(), userID)
 	if err != nil {
-		handleError(c, err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -48,26 +46,9 @@ func (h *Handler) PayInstallment(c *gin.Context) {
 
 	resp, err := h.svc.PayInstallment(c.Request.Context(), req)
 	if err != nil {
-		handleError(c, err)
+		_ = c.Error(err)
 		return
 	}
 
 	response.OK(c, resp)
-}
-
-func handleError(c *gin.Context, err error) {
-	var appErr *apperror.Error
-	if !errors.As(err, &appErr) {
-		response.Err(c, http.StatusInternalServerError, "INTERNAL", "unexpected error")
-		return
-	}
-
-	switch appErr.Kind {
-	case apperror.KindNotFound:
-		response.Err(c, http.StatusNotFound, "NOT_FOUND", appErr.Message)
-	case apperror.KindUpstream:
-		response.Err(c, http.StatusBadGateway, "UPSTREAM_ERROR", appErr.Message)
-	default:
-		response.Err(c, http.StatusInternalServerError, "INTERNAL", appErr.Message)
-	}
 }
